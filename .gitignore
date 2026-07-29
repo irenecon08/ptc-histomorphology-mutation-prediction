@@ -1,0 +1,25 @@
+# Data — never commit
+*.h5
+*.svs
+*.pt
+*.pth
+*.npy
+*.npz
+
+# Outputs
+*.png
+*.pdf
+results/
+heatmaps/
+embeddings/
+tiles/
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+venv/
+venv310/
+
+# OS
+.DS_Store
