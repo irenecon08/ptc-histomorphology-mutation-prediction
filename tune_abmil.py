@@ -1,3 +1,8 @@
+# NOTE (2026-07-XX): This script has a methodology issue — it evaluates
+# hyperparameter configurations using the test set, causing data leakage.
+# Superseded by tune_abmil_v2_full.py, which evaluates on the validation
+# set only. Kept here for reference/history; do not use for final results.
+
 import os
 import numpy as np
 import pandas as pd
