@@ -57,8 +57,8 @@ def get_embedding_file(patient):
 
 
 def get_test_predictions(model, test_df, num_classes):
-    """Run inference ONCE on the full test set. Returns probs (N, num_classes) and true labels (N,)."""
-    all_probs, all_labels = [], []
+    """Run inference ONCE on the full test set. Returns probs (N, num_classes), true labels (N,), and patient IDs (N,)."""
+    all_probs, all_labels, all_patients = [], [], []
     for _, row in test_df.iterrows():
         patient = row["patient"]
         emb_file = get_embedding_file(patient)
@@ -71,7 +71,8 @@ def get_test_predictions(model, test_df, num_classes):
             probs = torch.softmax(logits, dim=1).numpy()[0]
         all_probs.append(probs)
         all_labels.append(row["label"])
-    return np.array(all_probs), np.array(all_labels)
+        all_patients.append(patient)
+    return np.array(all_probs), np.array(all_labels), np.array(all_patients)
 
 
 def compute_metrics_multiclass(probs, labels, num_classes=3):
@@ -137,6 +138,19 @@ def run_bootstrap(task, probs, labels, num_classes, compute_fn, **kwargs):
         arr = np.array(arr)
         return np.percentile(arr, 2.5), np.percentile(arr, 97.5)
 
+    # --- raw per-iteration bootstrap arrays (added previously) ---
+    safe_name = task.replace(" ", "_").replace("(", "").replace(")", "")
+    raw_path = os.path.join(RESULTS_DIR, f"bootstrap_raw_{safe_name}.npz")
+    np.savez(
+        raw_path,
+        bal_acc=np.array(boot_bal_acc),
+        auc=np.array(boot_auc),
+        auprc=np.array(boot_auprc),
+        f1=np.array(boot_f1),
+    )
+    print(f"  Saved raw bootstrap arrays: {raw_path}")
+    # --- end ---
+
     results = {
         "point_estimate": {
             "bal_acc": float(point_bal_acc), "auc": float(point_auc),
@@ -160,6 +174,17 @@ def run_bootstrap(task, probs, labels, num_classes, compute_fn, **kwargs):
     return results
 
 
+# --- NEW: save raw per-patient test-set predictions (for confusion matrices, ROC/PR curves) ---
+def save_predictions_csv(path, patients, labels, probs, class_names):
+    """One row per test patient: true label plus predicted probability for each class."""
+    df = pd.DataFrame({"patient": patients, "true_label": labels})
+    for i, name in enumerate(class_names):
+        df[f"prob_{name}"] = probs[:, i]
+    df.to_csv(path, index=False)
+    print(f"  Saved per-patient predictions: {path}")
+# --- end NEW ---
+
+
 if __name__ == "__main__":
     splits_df = pd.read_csv(SPLITS_PATH)
     test_df_full = splits_df[splits_df["split"] == "test"].copy()
@@ -178,7 +203,11 @@ if __name__ == "__main__":
     model_mc.load_state_dict(torch.load(os.path.join(RESULTS_DIR, "best_multiclass_v2_retuned.pt"), map_location=DEVICE))
     model_mc.eval()
 
-    probs_mc, labels_mc = get_test_predictions(model_mc, test_df_mc, 3)
+    probs_mc, labels_mc, patients_mc = get_test_predictions(model_mc, test_df_mc, 3)
+    save_predictions_csv(
+        os.path.join(RESULTS_DIR, "test_predictions_abmil_multiclass.csv"),
+        patients_mc, labels_mc, probs_mc, ["BRAF_V600E", "RAS", "Other"]
+    )
     results_mc = run_bootstrap("multiclass", probs_mc, labels_mc, 3, compute_metrics_multiclass)
     all_results["multiclass"] = results_mc
 
@@ -193,7 +222,11 @@ if __name__ == "__main__":
     model_ret.load_state_dict(torch.load(os.path.join(RESULTS_DIR, "best_ret_binary_v2_retuned.pt"), map_location=DEVICE))
     model_ret.eval()
 
-    probs_ret, labels_ret = get_test_predictions(model_ret, test_df_ret, 2)
+    probs_ret, labels_ret, patients_ret = get_test_predictions(model_ret, test_df_ret, 2)
+    save_predictions_csv(
+        os.path.join(RESULTS_DIR, "test_predictions_abmil_ret_binary.csv"),
+        patients_ret, labels_ret, probs_ret, ["RET_negative", "RET_positive"]
+    )
 
     print("\n--- At DEFAULT threshold (0.5) ---")
     results_ret_default = run_bootstrap("ret_binary (default 0.5)", probs_ret, labels_ret, 2, compute_metrics_binary, threshold=0.5)

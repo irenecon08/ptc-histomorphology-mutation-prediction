@@ -29,7 +29,7 @@ def mean_pool_embedding(emb_file):
     return features.mean(axis=0)
 
 
-def build_feature_matrix(splits_df, split, task):
+def build_feature_matrix(splits_df, split, task, return_patients=False):
     data = splits_df[splits_df["split"] == split].reset_index(drop=True)
     if task == "multiclass":
         label_map = {"BRAF_V600E": 0, "RAS": 1, "Other": 2}
@@ -37,13 +37,16 @@ def build_feature_matrix(splits_df, split, task):
         labels = data["mutation_label"].map(label_map).values
     else:
         labels = data["RET"].values
-    X, y = [], []
+    X, y, patients = [], [], []
     for patient, label in zip(data["patient"].values, labels):
         emb_file = get_embedding_file(patient)
         if emb_file is None:
             continue
         X.append(mean_pool_embedding(emb_file))
         y.append(label)
+        patients.append(patient)
+    if return_patients:
+        return np.array(X), np.array(y), np.array(patients)
     return np.array(X), np.array(y)
 
 
@@ -108,6 +111,19 @@ def run_bootstrap(task, probs, labels, num_classes, compute_fn, **kwargs):
         arr = np.array(arr)
         return np.percentile(arr, 2.5), np.percentile(arr, 97.5)
 
+    # --- raw per-iteration bootstrap arrays (added previously) ---
+    safe_name = task.replace(" ", "_").replace("(", "").replace(")", "")
+    raw_path = os.path.join(RESULTS_DIR, f"bootstrap_raw_baseline_{safe_name}.npz")
+    np.savez(
+        raw_path,
+        bal_acc=np.array(boot_bal_acc),
+        auc=np.array(boot_auc),
+        auprc=np.array(boot_auprc),
+        f1=np.array(boot_f1),
+    )
+    print(f"  Saved raw bootstrap arrays: {raw_path}")
+    # --- end ---
+
     results = {
         "point_estimate": {"bal_acc": float(point_bal_acc), "auc": float(point_auc),
                             "auprc": float(point_auprc), "f1": float(point_f1)},
@@ -122,24 +138,43 @@ def run_bootstrap(task, probs, labels, num_classes, compute_fn, **kwargs):
     return results
 
 
+# --- NEW: save raw per-patient test-set predictions (for confusion matrices, ROC/PR curves) ---
+def save_predictions_csv(path, patients, labels, probs, class_names):
+    """One row per test patient: true label plus predicted probability for each class."""
+    df = pd.DataFrame({"patient": patients, "true_label": labels})
+    for i, name in enumerate(class_names):
+        df[f"prob_{name}"] = probs[:, i]
+    df.to_csv(path, index=False)
+    print(f"  Saved per-patient predictions: {path}")
+# --- end NEW ---
+
+
 if __name__ == "__main__":
     splits_df = pd.read_csv(SPLITS_PATH)
     all_results = {}
 
     print("="*60 + "\nBaseline Aim a) Multiclass\n" + "="*60)
     X_train, y_train = build_feature_matrix(splits_df, "train", "multiclass")
-    X_test, y_test = build_feature_matrix(splits_df, "test", "multiclass")
+    X_test, y_test, patients_test = build_feature_matrix(splits_df, "test", "multiclass", return_patients=True)
     clf_mc = LogisticRegression(max_iter=2000, multi_class="ovr")
     clf_mc.fit(X_train, y_train)
     probs_mc = clf_mc.predict_proba(X_test)
+    save_predictions_csv(
+        os.path.join(RESULTS_DIR, "test_predictions_baseline_multiclass.csv"),
+        patients_test, y_test, probs_mc, ["BRAF_V600E", "RAS", "Other"]
+    )
     all_results["multiclass"] = run_bootstrap("multiclass", probs_mc, y_test, 3, compute_metrics_multiclass)
 
     print("\n" + "="*60 + "\nBaseline Aim b) RET binary\n" + "="*60)
     X_train_r, y_train_r = build_feature_matrix(splits_df, "train", "ret_binary")
-    X_test_r, y_test_r = build_feature_matrix(splits_df, "test", "ret_binary")
+    X_test_r, y_test_r, patients_test_r = build_feature_matrix(splits_df, "test", "ret_binary", return_patients=True)
     clf_ret = LogisticRegression(max_iter=2000, class_weight="balanced")
     clf_ret.fit(X_train_r, y_train_r)
     probs_ret = clf_ret.predict_proba(X_test_r)
+    save_predictions_csv(
+        os.path.join(RESULTS_DIR, "test_predictions_baseline_ret_binary.csv"),
+        patients_test_r, y_test_r, probs_ret, ["RET_negative", "RET_positive"]
+    )
 
     print("\n--- At DEFAULT threshold (0.5) ---")
     all_results["ret_binary_default_threshold"] = run_bootstrap(

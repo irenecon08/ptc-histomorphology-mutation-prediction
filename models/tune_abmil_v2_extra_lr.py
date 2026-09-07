@@ -5,23 +5,27 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-from sklearn.metrics import roc_auc_score, average_precision_score, f1_score, balanced_accuracy_score, classification_report
+from sklearn.metrics import roc_auc_score, average_precision_score, f1_score, balanced_accuracy_score
 import h5py
 import json
+import time
 
-EMBEDDINGS_DIR = "/cs/student/project_msc/2025/aibh/iconstan/embeddings"
+# === CONFIG (pointing at CORRECTED v2 embeddings) ===
+EMBEDDINGS_DIR = "/cs/student/project_msc/2025/aibh/iconstan/embeddings_v2"
 SPLITS_PATH = "/cs/student/project_msc/2025/aibh/iconstan/splits.csv"
-OUTPUT_DIR = "/cs/student/project_msc/2025/aibh/iconstan/results/tuning"
+OUTPUT_DIR = "/cs/student/project_msc/2025/aibh/iconstan/results_v2/tuning"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 EMBED_DIM = 1536
 NUM_EPOCHS = 150   # more epochs since smaller LR may need longer to converge
-PATIENCE = 15      # more patience for the same reason
+PATIENCE = 15
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Test smaller learning rates at the best model size [512, 256]
-LR_VALUES = [5e-6, 1e-6]
-ATTN_DIM, FC_DIM = 512, 256
+# NEW: two additional, even smaller learning rates, continuing the same pattern
+# as the original small-LR extension (5e-6, 1e-6), at the same fixed architecture size
+EXTRA_LR_VALUES = [5e-7, 1e-7]
+FIXED_ARCH = (512, 256)  # matches the original small-LR extension's fixed size
+
 
 class SlideDataset(Dataset):
     def __init__(self, splits_df, split, task):
@@ -54,12 +58,14 @@ class SlideDataset(Dataset):
             features = torch.tensor(f["features"][:], dtype=torch.float32)
         return features, label
 
+
 def collate_fn(batch):
     batch = [(f, l) for f, l in batch if f is not None]
     if not batch:
         return None, None
     features, labels = zip(*batch)
     return list(features), torch.tensor(labels, dtype=torch.long)
+
 
 class GatedAttention(nn.Module):
     def __init__(self, embed_dim=1536, hidden_dim=512, dropout=0.0):
@@ -74,6 +80,7 @@ class GatedAttention(nn.Module):
         A = torch.softmax(A, dim=0)
         return torch.mm(A.T, x), A
 
+
 class ABMIL(nn.Module):
     def __init__(self, embed_dim=1536, attn_dim=512, fc_dim=256, num_classes=3, dropout=0.0):
         super().__init__()
@@ -86,6 +93,7 @@ class ABMIL(nn.Module):
     def forward(self, x):
         z, A = self.attention(x)
         return self.classifier(z), A
+
 
 def train_epoch(model, loader, optimizer, criterion):
     model.train()
@@ -106,6 +114,7 @@ def train_epoch(model, loader, optimizer, criterion):
             correct += (logits.argmax(dim=1) == label).sum().item()
             total += 1
     return total_loss / total, correct / total
+
 
 def evaluate(model, loader, criterion, num_classes):
     model.eval()
@@ -128,30 +137,24 @@ def evaluate(model, loader, criterion, num_classes):
     try:
         if num_classes == 2:
             auc = roc_auc_score(all_labels, all_probs[:, 1])
-            auprc = average_precision_score(all_labels, all_probs[:, 1])
         else:
             auc = roc_auc_score(all_labels, all_probs, multi_class="ovr", average="macro")
-            auprc = np.mean([
-                average_precision_score((np.array(all_labels) == c).astype(int), all_probs[:, c])
-                for c in range(num_classes)
-            ])
     except Exception:
-        auc, auprc = 0.0, 0.0
-    return bal_acc, auc, auprc, f1, all_preds, all_labels
+        auc = 0.0
+    return bal_acc, auc, f1
 
-def run_config(task, num_classes, lr, class_weights=None):
-    config_name = f"lr{lr}_attn{ATTN_DIM}_fc{FC_DIM}"
-    print(f"\n--- Config: {config_name} | Task: {task} ---")
+
+def run_config(task, num_classes, lr, attn_dim, fc_dim, class_weights=None):
+    config_name = f"lr{lr}_attn{attn_dim}_fc{fc_dim}"
+    print(f"\n--- Config: {config_name} | Task: {task} ---", flush=True)
 
     splits_df = pd.read_csv(SPLITS_PATH)
     train_ds = SlideDataset(splits_df, "train", task)
     val_ds = SlideDataset(splits_df, "val", task)
-    test_ds = SlideDataset(splits_df, "test", task)
     train_loader = DataLoader(train_ds, batch_size=1, shuffle=True, collate_fn=collate_fn)
     val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, collate_fn=collate_fn)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, collate_fn=collate_fn)
 
-    model = ABMIL(EMBED_DIM, ATTN_DIM, FC_DIM, num_classes, 0.0).to(DEVICE)
+    model = ABMIL(EMBED_DIM, attn_dim, fc_dim, num_classes, 0.0).to(DEVICE)
     if class_weights:
         weights = torch.tensor(class_weights, dtype=torch.float32).to(DEVICE)
         criterion = nn.CrossEntropyLoss(weight=weights)
@@ -162,59 +165,96 @@ def run_config(task, num_classes, lr, class_weights=None):
 
     best_val_auc = 0
     patience_counter = 0
-    best_path = os.path.join(OUTPUT_DIR, f"best_{task}_{config_name}.pt")
+    start = time.time()
 
     for epoch in range(NUM_EPOCHS):
         train_loss, train_acc = train_epoch(model, train_loader, optimizer, criterion)
-        val_bal_acc, val_auc, val_auprc, val_f1, _, _ = evaluate(model, val_loader, criterion, num_classes)
+        val_bal_acc, val_auc, val_f1 = evaluate(model, val_loader, criterion, num_classes)
         scheduler.step(val_auc)
-        print(f"  Epoch {epoch+1:3d} | Loss: {train_loss:.4f} | Val AUC: {val_auc:.3f} BalAcc: {val_bal_acc:.3f}")
+
         if val_auc > best_val_auc:
             best_val_auc = val_auc
-            torch.save(model.state_dict(), best_path)
             patience_counter = 0
         else:
             patience_counter += 1
         if patience_counter >= PATIENCE:
-            print(f"  Early stopping at epoch {epoch+1}")
+            print(f"  Early stopping at epoch {epoch+1} (elapsed {(time.time()-start)/60:.1f}min)", flush=True)
             break
+    else:
+        print(f"  Completed {NUM_EPOCHS} epochs (elapsed {(time.time()-start)/60:.1f}min)", flush=True)
 
-    # Test eval
-    model.load_state_dict(torch.load(best_path))
-    test_bal_acc, test_auc, test_auprc, test_f1, test_preds, test_labels = evaluate(model, test_loader, criterion, num_classes)
-    target_names = ["BRAF_V600E", "RAS", "Other"] if task == "multiclass" else ["RET_negative", "RET_positive"]
-    print(f"  TEST | BalAcc: {test_bal_acc:.4f} AUC: {test_auc:.4f} AUPRC: {test_auprc:.4f} F1: {test_f1:.4f}")
-    print(classification_report(test_labels, test_preds, target_names=target_names))
+    return {"config": config_name, "lr": lr, "attn_dim": attn_dim, "fc_dim": fc_dim, "best_val_auc": best_val_auc}
 
-    return {
-        "config": config_name, "lr": lr,
-        "best_val_auc": best_val_auc,
-        "test": {"bal_acc": test_bal_acc, "auc": test_auc, "auprc": test_auprc, "f1": test_f1}
+
+def run_extra_configs_and_merge(task, num_classes, class_weights=None):
+    print(f"\n{'='*60}")
+    print(f"EXTRA SMALL-LR CONFIGS (completing 13-config search): {task}")
+    print(f"Testing lr in {EXTRA_LR_VALUES} at fixed architecture {FIXED_ARCH}")
+    print(f"Selection based on VALIDATION AUC ONLY. Test set is not touched.")
+    print(f"{'='*60}")
+
+    new_results = []
+    for lr in EXTRA_LR_VALUES:
+        result = run_config(task, num_classes, lr, FIXED_ARCH[0], FIXED_ARCH[1], class_weights)
+        new_results.append(result)
+
+    # Load existing 11-config results and merge
+    results_path = os.path.join(OUTPUT_DIR, f"tuning_v2_results_{task}.json")
+    with open(results_path, "r") as f:
+        existing = json.load(f)
+
+    existing_configs = existing["all_configs_validation_only"]
+    all_configs = existing_configs + new_results
+
+    # Re-sort and re-select
+    all_configs_sorted = sorted(all_configs, key=lambda x: x["best_val_auc"], reverse=True)
+    best = all_configs_sorted[0]
+    literature_default = next((r for r in all_configs if r["config"] == "lr1e-05_attn512_fc256"), None)
+
+    print(f"\n{'='*60}")
+    print(f"UPDATED FULL RESULTS TABLE: {task} (13 configs total, corrected v2 data)")
+    print(f"{'='*60}")
+    print(f"{'Rank':<5} {'Config':<28} {'Val AUC':>9}")
+    for i, r in enumerate(all_configs_sorted):
+        marker = " <-- SELECTED" if r["config"] == best["config"] else ""
+        print(f"  {i+1:<3} {r['config']:<26} {r['best_val_auc']:>9.4f}{marker}")
+
+    if literature_default:
+        lit_rank = [r["config"] for r in all_configs_sorted].index("lr1e-05_attn512_fc256") + 1
+        print(f"\nLiterature default ranked #{lit_rank}/13 (val_auc={literature_default['best_val_auc']:.4f})")
+
+    if best["config"] == "lr1e-05_attn512_fc256":
+        print("\n*** Literature-default configuration selected (unchanged from before). ***")
+    else:
+        print(f"\n*** Selected config: {best['config']} (may be unchanged or different from the 11-config result — check) ***")
+
+    # Save updated, complete 13-config record
+    updated = {
+        "task": task,
+        "all_configs_validation_only": all_configs,
+        "selected_config": best["config"],
+        "literature_default_was_selected": best["config"] == "lr1e-05_attn512_fc256",
+        "note": "Test set was NOT evaluated in this script. Official test performance comes from train_abmil_v2_retrained.py only.",
+        "n_configs_total": len(all_configs)
     }
+    with open(results_path, "w") as f:
+        json.dump(updated, f, indent=2)
+    print(f"\nUpdated and saved: {results_path}")
+
+    return all_configs_sorted, best
+
 
 if __name__ == "__main__":
     print(f"Device: {DEVICE}")
-    print("Testing smaller learning rates (5e-6, 1e-6) at model size [512, 256]")
+    print(f"Using CORRECTED embeddings from: {EMBEDDINGS_DIR}")
 
-    all_results = {"multiclass": [], "ret_binary": []}
-
-    for lr in LR_VALUES:
-        all_results["multiclass"].append(run_config("multiclass", 3, lr))
+    run_extra_configs_and_merge("multiclass", num_classes=3)
 
     ret_neg, ret_pos = 319, 21
     total = ret_neg + ret_pos
     weights = [total / (2 * ret_neg), total / (2 * ret_pos)]
-    for lr in LR_VALUES:
-        all_results["ret_binary"].append(run_config("ret_binary", 2, lr, class_weights=weights))
+    run_extra_configs_and_merge("ret_binary", num_classes=2, class_weights=weights)
 
-    with open(os.path.join(OUTPUT_DIR, "small_lr_results.json"), "w") as f:
-        json.dump(all_results, f, indent=2)
-
-    print("\n=== SUMMARY: smaller learning rates ===")
-    for task, results in all_results.items():
-        print(f"\n{task}:")
-        for r in results:
-            t = r["test"]
-            print(f"  {r['config']}: Test AUC={t['auc']:.4f} AUPRC={t['auprc']:.4f} BalAcc={t['bal_acc']:.4f} F1={t['f1']:.4f}")
-
-    print("\nDone! Compare against original (lr1e-5): aim a AUC=0.783, aim b AUC=0.901")
+    print("\n" + "="*60)
+    print("EXTRA CONFIGS COMPLETE - 13-config search now finalized for both tasks!")
+    print("="*60)
