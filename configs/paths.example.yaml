@@ -1,0 +1,8 @@
+# Copy this file to configs/paths.yaml and edit the paths for your machine.
+# configs/paths.yaml is ignored by Git, so your local paths are never committed.
+
+slides_dir: /path/to/TCGA-THCA/slides          # raw .svs whole-slide images
+tiles_dir: /path/to/tiles                       # output of tiling
+embeddings_dir: /path/to/embeddings             # one .h5 file of UNI2-h features per slide
+splits_csv: /path/to/splits.csv                 # institutional train/val/test split
+results_dir: /path/to/results                   # trained models, predictions, metrics
