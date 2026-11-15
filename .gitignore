@@ -20,12 +20,12 @@ htmlcov/
 configs/paths.yaml
 
 # Data, model weights and outputs: never commit these
-data/
-outputs/
-results/
-tiles/
-embeddings/
-heatmaps/
+/data/
+/outputs/
+/results/
+/tiles/
+/embeddings/
+/heatmaps/
 *.svs
 *.h5
 *.pt
