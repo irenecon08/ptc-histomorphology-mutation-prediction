@@ -61,7 +61,7 @@ analyses/               downstream analyses from the dissertation (TIIC, interpr
                         clinical, figures), run as scripts; see analyses/README.md
 configs/                experiment settings (committed) and local paths (not committed)
 tests/                  unit tests and an end-to-end run on synthetic data
-docs/                   design decisions, known issues, original environment
+docs/                   known issues, original environment
 ```
 
 ---
@@ -150,7 +150,6 @@ The downstream analyses are described in [analyses/README.md](analyses/README.md
 - **Uncertainty:** stratified bootstrap (resampling within each class) for CIs, and a paired
   bootstrap on shared patients for model comparisons.
 
-Why the code is organised the way it is: [docs/design_decisions.md](docs/design_decisions.md).
 What differs from the code that produced the dissertation, and known limitations:
 [docs/known_issues.md](docs/known_issues.md).
 
