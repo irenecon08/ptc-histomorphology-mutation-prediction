@@ -40,4 +40,3 @@ def test_get_task_rejects_unknown_name() -> None:
 def test_tasks_cannot_be_modified() -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
         MULTICLASS.label_column = "RET"  # type: ignore[misc]
-        

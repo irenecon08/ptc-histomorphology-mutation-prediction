@@ -56,7 +56,7 @@ class GatedAttention(nn.Module):
         attention = torch.softmax(scores, dim=0)
         slide_embedding = attention.T @ tiles
         return slide_embedding, attention
-    
+
 
 class ABMIL(nn.Module):
     """Slide-level classifier: gated attention pooling followed by a two-layer MLP.
