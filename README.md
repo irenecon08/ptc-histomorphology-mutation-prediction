@@ -1,227 +1,175 @@
-# Predicting Driver Alterations and Revealing Their Histomorphological Correlates in Papillary Thyroid Carcinoma
+# Predicting driver alterations in papillary thyroid carcinoma from H&E slides
 
-MSc Dissertation Project — Artificial Intelligence for Biomedicine and Healthcare, University College London
+[![CI](https://github.com/irenecon08/ptc-histomorphology-mutation-prediction/actions/workflows/ci.yml/badge.svg)](https://github.com/irenecon08/ptc-histomorphology-mutation-prediction/actions/workflows/ci.yml)
 
-This project investigates the prediction of driver alterations in papillary thyroid carcinoma (PTC) from haematoxylin and eosin (H&E)-stained whole-slide images (WSIs). The study focuses on BRAF V600E, RAS, and RET fusion status using a frozen UNI2-h pathology foundation model for tile-level feature extraction and gated attention-based multiple instance learning (ABMIL) for slide-level prediction.
+Code for my MSc dissertation (Artificial Intelligence for Biomedicine and Healthcare, UCL, 2026):
+predicting BRAF V600E, RAS and RET-fusion status in papillary thyroid carcinoma (PTC) from
+whole-slide H&E images, and characterising the tissue the model attends to.
 
-Beyond predictive performance, the project examines the contribution of the modelling components and investigates the tissue characteristics selected by the attention mechanism. This includes comparisons with mean pooling, multimodal fusion with clinical variables, TIIC density analysis, and characterisation of epithelial nuclear morphology.
+The pipeline tiles each slide, embeds every tile with the frozen
+[UNI2-h](https://huggingface.co/MahmoodLab/UNI2-h) pathology foundation model, and aggregates
+the tile embeddings with gated attention-based multiple instance learning (ABMIL,
+[Ilse et al., 2018](https://arxiv.org/abs/1802.04712)). It is compared with a mean-pooling
+baseline and with a multimodal model that adds routine clinical variables, on an institutional
+hold-out test set.
 
-Author: Irene Constantinidou
-Primary supervisor: Dr Petru Manescu
-Co-supervisor: Dr Karen Sayal (UCLH)
-Institution: University College London
-
----
-
-## Research Aims
-
-The project addresses three main research aims:
-
-1. **Predict driver-alteration status from unannotated WSIs.**
-   Develop a weakly supervised pipeline that aggregates frozen tile-level features using gated attention, without requiring regional annotations, and evaluate BRAF V600E/RAS/Other and RET fusion prediction under an institutional holdout setting.
-
-2. **Assess the contribution of individual pipeline components.**
-   Compare learned attention pooling with unweighted mean pooling, and evaluate the contribution of routinely available clinical variables through multimodal fusion.
-
-3. **Characterise the tissue selected by the attention mechanism.**
-   Quantify the relationship between attention and tumour-infiltrating immune cell (TIIC) density in the held-out cohort, assess whether this relationship is independent of tissue composition, and characterise epithelial nuclear morphology in attended tissue across driver genotypes.
+Author: Irene Constantinidou · Supervisors: Dr Petru Manescu (UCL), Dr Karen Sayal (UCLH)
 
 ---
 
-## Repository Overview
+## Results
 
-This repository contains the reference implementation used to produce the results and figures reported in the dissertation. The code is organised to document the experimental workflow and preserve the implementation details underlying the reported analyses.
+TCGA-THCA, 505 labelled patients; all 80 patients from one institution (site EL) are held out
+as the test set. Point estimates with stratified bootstrap 95% CIs (2,000 resamples). RET rows
+use the decision threshold selected on the validation set.
 
-The TCGA whole-slide images must be obtained through the appropriate GDC data-access procedures, while the original experiments were conducted on UCL departmental infrastructure using environment-specific paths.
+| Task | Model | Balanced acc. | AUROC | AUPRC | Macro F1 |
+| --- | --- | --- | --- | --- | --- |
+| BRAF V600E / RAS / Other | Mean-pool baseline | 0.616 (0.481–0.760) | 0.773 (0.664–0.877) | 0.677 (0.557–0.821) | 0.650 (0.492–0.791) |
+| | **ABMIL** | 0.692 (0.568–0.819) | **0.838** (0.740–0.930) | **0.766** (0.647–0.897) | 0.742 (0.591–0.856) |
+| | ABMIL + clinical | 0.729 (0.600–0.853) | 0.835 (0.733–0.927) | 0.760 (0.638–0.888) | 0.762 (0.634–0.874) |
+| RET fusion | Mean-pool baseline (t = 0.11) | 0.842 (0.662–0.953) | 0.838 (0.550–0.998) | 0.690 (0.340–0.976) | 0.684 (0.572–0.812) |
+| | **ABMIL** (t = 0.13) | 0.842 (0.669–0.953) | **0.948** (0.831–1.000) | **0.868** (0.597–1.000) | 0.684 (0.577–0.792) |
+| | ABMIL + clinical (t = 0.02) | 0.813 (0.632–0.986) | 0.838 (0.575–1.000) | 0.660 (0.328–1.000) | 0.791 (0.624–0.951) |
 
----
+- In a paired bootstrap on the same patients, ABMIL beat the baseline on the three-class task
+  for AUROC (+0.065, 95% CI 0.014–0.128) and AUPRC (+0.089, 0.009–0.181). No other
+  difference was significant; the RET test set has only six positives.
+- Adding clinical variables did not measurably help either task.
+- Attention is negatively correlated with immune-cell density, but this is almost entirely
+  explained by attention concentrating on epithelium-dense tumour regions (partial
+  correlation controlling for epithelial density: r = −0.010, p = 0.19 for the three-class
+  model).
 
-## Dataset
-
-Experiments use the TCGA-THCA (Thyroid Carcinoma) cohort, comprising 519 slides from 505 labelled patients.
-
-- BRAF and RAS labels were obtained from GDC Mutation Annotation Format (MAF) files.
-- RET fusion labels were obtained from cBioPortal using the PanCancer Atlas 2018 thyroid carcinoma study.
-- An institutional train/validation/test split was used, with one institution held out entirely as the test set.
-
-No patient-level data are redistributed in this repository.
-
----
-
-## Data and Pipeline Correction
-
-An early version of the tiling pipeline used an incorrect downsample factor during tile extraction, resulting in only approximately 53% of the tissue area being covered.
-
-The issue was identified and corrected before the final experiments. The corrected pipeline was subsequently used to:
-
-1. re-tile all slides;
-2. re-extract all tile embeddings;
-3. repeat model training and hyperparameter selection;
-4. regenerate evaluation results; and
-5. repeat the downstream analyses.
-
-All dissertation results are based on the corrected pipeline. Files containing `v2` or later in their filename correspond to analyses performed using this implementation.
-
-`preprocessing/audit_downsamples.py` is retained as a diagnostic record of the original issue and is not part of the final execution pipeline.
+The fusion rows use the 79 test patients with clinical data.
 
 ---
 
-## Repository Structure
+## Repository layout
 
 ```text
-preprocessing/     Tiling, embedding extraction, and dataset splits
-models/             Baseline and ABMIL training and hyperparameter tuning
-evaluation/         Bootstrap confidence intervals and paired comparisons
-interpretability/   Attention heatmaps, embeddings, and tumour morphology
-tiic_analysis/      TIIC correlation analyses and hypothesis testing
-fusion/             Multimodal clinical-variable and ABMIL embedding fusion
-figures/            Scripts used to generate preprocessing figures
+src/ptc_mil/            the installable package
+  data/                 labels, splits, slide/embedding lookup, datasets, clinical features
+  preprocessing/        tiling and UNI2-h embedding extraction
+  models/               ABMIL and the mean-pooling baseline
+  training/             ABMIL training and hyperparameter search
+  fusion/               multimodal fusion head, training and search
+  evaluation/           metrics, threshold selection, bootstrap CIs, prediction tables
+  analysis/             shared context used by the scripts in analyses/
+  pipeline.py, cli.py   the steps of the experiment and the `ptc-mil` command
+analyses/               downstream analyses from the dissertation (TIIC, interpretability,
+                        clinical, figures), run as scripts; see analyses/README.md
+configs/                experiment settings (committed) and local paths (not committed)
+tests/                  unit tests and an end-to-end run on synthetic data
+docs/                   design decisions, known issues, original environment
 ```
 
 ---
 
-## Experimental Pipeline
+## Installation
 
-The main workflow is:
+Python 3.10 or later.
 
-1. **Create dataset splits**
-   `preprocessing/create_splits.py`
-   Constructs the institutional train/validation/test split using patient-level labels.
-
-2. **Tile WSIs**
-   `preprocessing/retile_slides_fixed.py`
-   Extracts tiles at approximately 10× magnification using the corrected downsample factor.
-
-3. **Extract tile embeddings**
-   `preprocessing/extract_embeddings_fixed.py`
-   Extracts frozen UNI2-h representations, with a dimensionality of 1536 per tile.
-
-4. **Train the baseline**
-   `models/baseline_mean_pool_v2.py`
-   Mean-pools tile embeddings into a slide-level representation and applies logistic regression.
-
-5. **Tune ABMIL**
-   `models/tune_abmil_v2_full.py` followed by `models/tune_abmil_v2_extra_lr.py`
-   Performs a 9-configuration search followed by a 4-configuration low-learning-rate extension, giving 13 configurations in total.
-
-   The earlier `models/tune_abmil.py` is retained for transparency. It contains a documented test-set leakage issue in model selection and was not used to determine the final hyperparameters.
-
-6. **Train final ABMIL models**
-   `models/train_abmil_v2_retrained.py`
-   Trains the final multiclass and RET binary models using the corrected pipeline and selected hyperparameters.
-
-7. **Calibrate the RET threshold**
-   `models/optimal_threshold_ret_retuned.py`
-   Selects the RET decision threshold using the validation set only.
-
-8. **Evaluate predictive performance**
-   The `evaluation/` scripts calculate bootstrap confidence intervals and paired comparisons between the baseline, ABMIL, and multimodal models.
-
-9. **Run downstream analyses**
-   The interpretability, TIIC, tumour morphology, and multimodal fusion analyses operate on the trained models and can be run independently.
-
----
-
-## Key Results
-
-RET metrics are reported at the validation-set-calibrated decision threshold. AUROC and AUPRC are threshold-independent.
-
-| Task                          | Model                   | BalAcc | AUROC | AUPRC |    F1 |
-| ----------------------------- | ----------------------- | -----: | ----: | ----: | ----: |
-| Multiclass (BRAF/RAS/Other)   | Baseline                |  0.615 | 0.773 | 0.677 | 0.650 |
-| Multiclass                    | ABMIL                   |  0.692 | 0.838 | 0.766 | 0.742 |
-| Multiclass                    | ABMIL + clinical fusion |  0.729 | 0.835 | 0.760 | 0.762 |
-| RET binary (threshold = 0.13) | ABMIL                   |  0.842 | 0.948 | 0.868 | 0.684 |
-| RET binary                    | ABMIL + clinical fusion |  0.813 | 0.838 | 0.660 | 0.790 |
-
-Bootstrap 95% confidence intervals for the reported metrics are provided in the outputs under `evaluation/` and are reported in full in the dissertation.
-
-Clinical fusion did not produce a consistent improvement across metrics: it improved balanced accuracy and F1 for the multiclass task, while AUROC and AUPRC were slightly lower. For RET prediction, F1 improved at the selected threshold, whereas AUROC and AUPRC decreased. Overall, the results indicate a trade-off between operating-point performance and ranking performance, rather than a uniform benefit from clinical fusion.
-
----
-
-## Analyses of the Learned Representation
-
-### Attention embeddings
-
-Attention-derived slide representations show separation between BRAF-mutant slides and the RAS/Other groups in UMAP space, while RAS and Other samples exhibit substantial overlap.
-
-For RET fusion status, no clear two-dimensional separation is observed, consistent with the small number of RET-positive cases (33/505).
-
----
-
-## Attention-Based Tissue Analysis
-
-### TIIC analysis
-
-Attention scores show a negative correlation with local immune-cell density across 80 test slides, using full-coverage 4×4 sub-crop sampling at native 40× resolution.
-
-After controlling for epithelial cell density, the association is no longer significant for the multiclass model:
-
-```text
-partial r = -0.0095, p = 0.190
+```bash
+git clone https://github.com/irenecon08/ptc-histomorphology-mutation-prediction.git
+cd ptc-histomorphology-mutation-prediction
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"            # training and evaluation on extracted embeddings
+pip install -e ".[wsi]"            # + tiling and UNI2-h extraction (OpenSlide, timm)
+pip install -e ".[analysis]"       # + downstream analyses (TIAToolbox, OpenCV, UMAP)
 ```
 
-and is borderline for the RET binary model:
+Check the installation (no data needed; runs the whole pipeline on synthetic slides):
 
-```text
-partial r = -0.0141, p = 0.051
+```bash
+pytest
 ```
 
-These results suggest that the observed negative attention–immune correlation is largely explained by attention being concentrated in epithelial/tumour-dense regions, rather than by an independently learned immune-microenvironment signal.
+---
 
-### Epithelial morphology
+## Reproducing the experiments
 
-The morphology analysis characterises epithelial nuclear features within attended tissue and examines their distribution across driver genotypes. This provides a complementary assessment of the histomorphological characteristics associated with regions selected by the learned attention mechanism.
+### Data
+
+- Whole-slide images: TCGA-THCA diagnostic slides from the [GDC Data Portal](https://portal.gdc.cancer.gov/).
+- BRAF and RAS labels from the GDC mutation annotation files; RET-fusion labels and clinical
+  variables from cBioPortal (`thca_tcga_pan_can_atlas_2018`).
+- Immune estimates for the molecular comparison from Thorsson et al. (2018), Table S1.
+
+No patient-level data is redistributed here. Copy `configs/paths.example.yaml` to
+`configs/paths.yaml` and point it at your copies.
+
+### Steps
+
+Each step reads and writes files under `results_dir`, so any step can be re-run on its own.
+All hyperparameters are in `configs/experiment.yaml` and are set to the dissertation values.
+
+```bash
+ptc-mil tile                          # 256 px tiles at level 1, background removed
+ptc-mil embed                         # UNI2-h embedding per tile (GPU)
+ptc-mil split                         # site EL = test, rest split 80/20 (seed 42)
+
+ptc-mil baseline                      # mean pooling + logistic regression
+ptc-mil tune                          # 11-configuration ABMIL search on validation AUROC
+ptc-mil train                         # final ABMIL model per task
+ptc-mil predict                       # validation and test predictions, saved once
+ptc-mil calibrate --model abmil       # RET threshold on validation balanced accuracy
+ptc-mil calibrate --model baseline
+ptc-mil evaluate --model abmil        # test metrics + bootstrap CIs
+ptc-mil evaluate --model baseline
+
+ptc-mil clinical                      # nine clinical variables, train-only imputation
+ptc-mil fusion-search                 # 14-configuration fusion head search
+ptc-mil fusion-train
+ptc-mil calibrate --model fusion
+ptc-mil evaluate --model fusion
+
+ptc-mil compare --other baseline      # paired bootstrap vs ABMIL
+ptc-mil compare --other fusion
+```
+
+Run `ptc-mil <step> --help` for options, e.g. `--task ret_binary` to run one task.
+The downstream analyses are described in [analyses/README.md](analyses/README.md).
 
 ---
 
-## Known Limitations
+## Methods in brief
 
-- **Test-set leakage in `models/tune_abmil.py`:** this earlier tuning script contains a test-set leakage issue during model selection. It is retained for transparency but is superseded by the `v2` tuning scripts.
-- **Unpreserved supporting analysis:** one supporting analysis associated with the immune-molecular hypothesis testing (H3 in the dissertation) was executed and its outputs retained, but the exact generating script was not preserved.
-- **Large and restricted data:** trained model weights, TCGA WSIs, tile datasets, and extracted embeddings are not included due to their size and, for TCGA data, applicable data-use restrictions.
-- **Infrastructure dependence:** the original experiments were run on UCL departmental infrastructure, so paths and some environment-specific configuration require modification on other systems.
+- **Tiling:** non-overlapping 256×256 tiles at OpenSlide level 1; a tile is background when
+  more than 85% of its pixels are above 220 in every channel. Level coordinates are converted
+  with each slide's actual downsample factor (see [docs/known_issues.md](docs/known_issues.md)).
+- **Features:** frozen UNI2-h (ViT-H/14), 1536-dimensional embedding per tile.
+- **ABMIL:** gated attention pooling, then a two-layer classifier. Adam (weight decay 1e-3),
+  one slide per step, learning rate halved on a validation-AUROC plateau, early stopping on
+  validation AUROC (patience 10). RET uses inverse-frequency class weights.
+- **Model selection:** learning rate and model size chosen on validation AUROC only. The RET
+  decision threshold is chosen on validation balanced accuracy and applied once to the test set.
+- **Fusion:** the frozen ABMIL slide embedding, z-normalised on training patients, is
+  concatenated with nine clinical variables (age, sex, race, ethnicity, overall/T/N/M stage,
+  histological subtype) and passed to a new two-layer head.
+- **Uncertainty:** stratified bootstrap (resampling within each class) for CIs, and a paired
+  bootstrap on shared patients for model comparisons.
 
----
-
-## Data Access
-
-Whole-slide images and associated clinical/genomic data are available through the GDC Data Portal under the applicable TCGA data-use conditions.
-
-RET fusion labels were obtained from cBioPortal, using the `thca_tcga_pan_can_atlas_2018` study.
-
-This repository does not redistribute patient-level data.
-
----
-
-## Environment
-
-The experiments were developed and executed on UCL Computer Science departmental GPU infrastructure using Rocky Linux 9 and Python 3.10 for the duration of GPU access.
-
-Exact package versions are pinned in `requirements.txt`, recovered directly from the project's `venv310` virtual environment. The two most version-sensitive dependencies are:
-
-- `torch==2.5.1+cu121`
-- `tiatoolbox==2.0.1`
-
-The latter is used with the `hovernet_fast-monusac` model weights for TIIC nucleus detection.
-
-After GPU access ended, a small number of scripts with no GPU or deep-learning dependencies were run on the CPU-only login node instead, out of necessity rather than by design:
-
-- `preprocessing/create_splits.py`
-- `evaluation/genotype_stratified_slide_selection.py`
-- `evaluation/plot_paired_forest.py`
-
-The pinned environment therefore reflects the environment used for the main GPU-based experiments.
+Why the code is organised the way it is: [docs/design_decisions.md](docs/design_decisions.md).
+What differs from the code that produced the dissertation, and known limitations:
+[docs/known_issues.md](docs/known_issues.md).
 
 ---
+
+## History
+
+The code as submitted with the dissertation is preserved at the
+[`dissertation-submission`](https://github.com/irenecon08/ptc-histomorphology-mutation-prediction/tree/dissertation-submission)
+tag. The current version reorganises it into a tested package without changing the methods.
+The exact package versions of the original GPU environment are in
+[docs/dissertation_environment.txt](docs/dissertation_environment.txt).
 
 ## Citation
 
-> Constantinidou, I. (2026). *Predicting Driver Alterations and Revealing Their Histomorphological Correlates in Papillary Thyroid Carcinoma*. MSc Dissertation, University College London.
-
----
+> Constantinidou, I. (2026). *Predicting Driver Alterations and Revealing Their
+> Histomorphological Correlates in Papillary Thyroid Carcinoma*. MSc Dissertation,
+> University College London.
 
 ## License
 
-MIT — see `LICENSE`.
+MIT, see [LICENSE](LICENSE).

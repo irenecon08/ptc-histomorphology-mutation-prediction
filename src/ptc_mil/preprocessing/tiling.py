@@ -1,6 +1,6 @@
 """Tile whole-slide images into non-overlapping 256x256 tiles and drop background.
 
-Tiles are read at pyramid level 1 (about 20x on 40x TCGA scans). A tile is background
+Tiles are read at pyramid level 1 (about 10x magnification). A tile is background
 when more than 85% of its pixels have all RGB channels above 220. Only coordinates are
 stored; pixels are read again during embedding extraction.
 
