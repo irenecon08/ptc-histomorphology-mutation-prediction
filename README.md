@@ -61,7 +61,7 @@ analyses/               downstream analyses from the dissertation (TIIC, interpr
                         clinical, figures), run as scripts; see analyses/README.md
 configs/                experiment settings (committed) and local paths (not committed)
 tests/                  unit tests and an end-to-end run on synthetic data
-docs/                   known issues, original environment
+docs/                   package versions of the original environment
 ```
 
 ---
@@ -149,9 +149,6 @@ The downstream analyses are described in [analyses/README.md](analyses/README.md
   histological subtype) and passed to a new two-layer head.
 - **Uncertainty:** stratified bootstrap (resampling within each class) for CIs, and a paired
   bootstrap on shared patients for model comparisons.
-
-What differs from the code that produced the dissertation, and known limitations:
-[docs/known_issues.md](docs/known_issues.md).
 
 ---
 
