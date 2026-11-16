@@ -43,6 +43,11 @@ use the decision threshold selected on the validation set.
 
 The fusion rows use the 79 test patients with clinical data.
 
+> **Note:** these are the results reported in the dissertation. They cannot be reproduced
+> exactly from this repository: the TCGA data and trained model weights are not included, and
+> the code has since been reorganised. The code that produced them is preserved at the
+> [`dissertation-submission`](https://github.com/irenecon08/ptc-histomorphology-mutation-prediction/tree/dissertation-submission) tag.
+
 ---
 
 ## Repository layout
