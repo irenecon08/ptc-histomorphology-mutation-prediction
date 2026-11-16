@@ -62,6 +62,5 @@ Run order: `tiic_correlation` → `summarise_tiic` / `hypothesis*_checks` →
 ## Other
 
 - `figures/tiling_figure_assets.py`: panels for the tiling figure.
-- `diagnostics/audit_downsamples.py`: the audit that found the tiling coordinate error
-  (see `docs/known_issues.md`).
+- `diagnostics/audit_downsamples.py`: reports each slide's level-1 downsample factor.
 - `diagnostics/tiic_sanity_check.py`: checks run on one slide before the full TIIC analysis.

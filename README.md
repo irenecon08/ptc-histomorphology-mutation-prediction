@@ -137,7 +137,7 @@ The downstream analyses are described in [analyses/README.md](analyses/README.md
 
 - **Tiling:** non-overlapping 256×256 tiles at OpenSlide level 1; a tile is background when
   more than 85% of its pixels are above 220 in every channel. Level coordinates are converted
-  with each slide's actual downsample factor (see [docs/known_issues.md](docs/known_issues.md)).
+  with each slide's actual downsample factor.
 - **Features:** frozen UNI2-h (ViT-H/14), 1536-dimensional embedding per tile.
 - **ABMIL:** gated attention pooling, then a two-layer classifier. Adam (weight decay 1e-3),
   one slide per step, learning rate halved on a validation-AUROC plateau, early stopping on

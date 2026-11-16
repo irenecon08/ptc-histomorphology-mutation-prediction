@@ -9,15 +9,6 @@ Re-running the pipeline will not reproduce the dissertation checkpoints bit-for-
 case: GPU training is not fully deterministic, and the original ABMIL and fusion training
 runs were not seeded. Results should agree within the reported confidence intervals.
 
-## The tiling correction (part of the dissertation)
-
-The first tiling run assumed that OpenSlide level 1 is a 2× downsample of level 0. On many
-TCGA-THCA slides it is not, so tiles were read from the wrong positions and covered only about
-53% of the tissue. `analyses/diagnostics/audit_downsamples.py` found this. Before the final
-experiments every slide was re-tiled using each slide's actual downsample factor, and
-embeddings, training, tuning, evaluation and all analyses were repeated. All dissertation
-results, and this code, use the corrected tiling.
-
 ## Behaviour changes
 
 ### 1. One rule for patients with more than one slide
