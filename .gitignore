@@ -1,25 +1,44 @@
-# Data — never commit
-*.h5
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+venv310/
+.ipynb_checkpoints/
+build/
+dist/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local configuration (copy configs/paths.example.yaml to configs/paths.yaml)
+configs/paths.yaml
+
+# Data, model weights and outputs: never commit these
+/data/
+/outputs/
+/results/
+/tiles/
+/embeddings/
+/heatmaps/
 *.svs
+*.h5
 *.pt
 *.pth
 *.npy
 *.npz
 
-# Outputs
+# Generated figures (images in docs/ are kept for the README)
 *.png
 *.pdf
-results/
-heatmaps/
-embeddings/
-tiles/
+!docs/**/*.png
 
-# Python
-__pycache__/
-*.pyc
-.ipynb_checkpoints/
-venv/
-venv310/
-
-# OS
+# OS / editors
 .DS_Store
+.vscode/
+.idea/

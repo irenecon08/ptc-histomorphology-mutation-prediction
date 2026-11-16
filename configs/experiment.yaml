@@ -1,0 +1,72 @@
+# Experiment settings used in the MSc dissertation. Changing these changes the results.
+
+seed: 42                      # model initialisation and training-order shuffling
+
+tasks:
+  # Selected on validation AUROC by the grid search below (dissertation §4.8)
+  multiclass:
+    lr: 1.0e-4
+    attn_dim: 512
+    fc_dim: 512
+    checkpoint: best_multiclass.pt
+  ret_binary:
+    lr: 5.0e-5
+    attn_dim: 512
+    fc_dim: 256
+    checkpoint: best_ret_binary.pt
+
+# RET-negative and RET-positive counts behind the inverse-frequency loss weights (0.53, 8.10)
+ret_class_counts: [319, 21]
+
+training:
+  num_epochs: 100
+  patience: 10                # early stopping on validation AUROC
+  weight_decay: 1.0e-3
+  dropout: 0.0
+  lr_factor: 0.5              # ReduceLROnPlateau factor; its patience is patience // 2
+
+tuning:
+  # Stage 1: 3 learning rates x 3 model sizes
+  - lrs: [1.0e-5, 5.0e-5, 1.0e-4]
+    sizes: [[256, 128], [512, 256], [512, 512]]
+    num_epochs: 100
+    patience: 10
+  # Stage 2: small learning rates at the literature-default size
+  - lrs: [5.0e-6, 1.0e-6]
+    sizes: [[512, 256]]
+    num_epochs: 150
+    patience: 15
+
+# Optional extra stage run after the dissertation's 11 configurations; enable with
+# `ptc-mil tune --extended`. Not part of the reported search.
+tuning_extension:
+  - lrs: [5.0e-7, 1.0e-7]
+    sizes: [[512, 256]]
+    num_epochs: 150
+    patience: 15
+
+thresholds:
+  # RET decision thresholds selected on validation balanced accuracy (dissertation Table 5)
+  abmil: 0.13
+  baseline: 0.11
+  abmil_grid: [0.01, 0.55, 0.01]
+  fusion_grid: [0.01, 1.0, 0.01]
+
+baseline:
+  max_iter: 2000
+
+fusion:
+  lr_grid: [1.0e-4, 1.0e-3, 1.0e-2]
+  fc_dim_grid: [64, 128, 256, 512]
+  dropout_extension: [0.2, 0.4]
+  batch_size: 16
+  eval_batch_size: 32
+  weight_decay: 1.0e-3
+  num_epochs: 100
+  patience: 10
+  # Filled from the search output (fusion_hparam_search_<task>.csv) if left empty
+  selected: {}
+
+bootstrap:
+  resamples: 2000
+  seed: 42
