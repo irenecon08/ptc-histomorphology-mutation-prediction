@@ -1,1 +1,1 @@
-"""Utils components for ptc_mil."""
+"""Shared utilities: logging, seeding and device selection."""

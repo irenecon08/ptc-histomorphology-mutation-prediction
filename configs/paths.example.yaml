@@ -1,8 +1,19 @@
-# Copy this file to configs/paths.yaml and edit the paths for your machine.
+# Copy this file to configs/paths.yaml and edit it for your machine.
 # configs/paths.yaml is ignored by Git, so your local paths are never committed.
+# Relative paths below are resolved against `root`.
 
-slides_dir: /path/to/TCGA-THCA/slides          # raw .svs whole-slide images
-tiles_dir: /path/to/tiles                       # output of tiling
-embeddings_dir: /path/to/embeddings             # one .h5 file of UNI2-h features per slide
-splits_csv: /path/to/splits.csv                 # institutional train/val/test split
-results_dir: /path/to/results                   # trained models, predictions, metrics
+root: /path/to/project-data
+
+slides_dir: slides                  # raw TCGA-THCA .svs files (GDC layout: one folder per slide)
+tiles_dir: tiles                    # tile coordinates, one .h5 per slide (output of `ptc-mil tile`)
+embeddings_dir: embeddings          # UNI2-h features, one .h5 per slide (output of `ptc-mil embed`)
+labels_csv: final_labels.csv        # one row per patient: BRAF_V600E, RAS, RET, mutation_label
+splits_csv: splits.csv              # output of `ptc-mil split`
+results_dir: results                # checkpoints, predictions and metrics
+
+# Needed only for the fusion model and the downstream analyses
+clinical_tsv: thca_tcga_pan_can_atlas_2018_clinical_data.tsv     # cBioPortal clinical export
+clinical_features_csv: results/clinical_features.csv             # output of `ptc-mil clinical`
+thorsson_csv: thorsson_immune_landscape.csv                      # Thorsson et al. 2018 immune estimates
+analyses_dir: results/analyses
+hf_token_file: hf_token.txt         # Hugging Face token with access to MahmoodLab/UNI2-h
