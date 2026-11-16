@@ -1,3 +1,5 @@
+# Package versions of the environment the dissertation results were produced in
+# (UCL GPU cluster, CUDA 12.1). For a new install use pyproject.toml instead.
 h5py==3.16.0
 numpy==2.2.6
 openslide-bin==4.0.0.12
